@@ -76,6 +76,12 @@ t_place = None  # start of placement movement
 def update(monitor, block_location):
     sct = mss.mss()
 
+    # DEBUG: print matrix
+    output = "sct-{top}x{left}_{width}x{height}.png".format(**monitor)
+    sct_img = sct.grab(monitor)
+    mss.tools.to_png(sct_img.rgb, sct_img.size, output=output)
+    print(output)
+
     global t_game, t_move, t_switch
     t_game = time.time()
     t_move = time.time()
@@ -142,17 +148,19 @@ def update(monitor, block_location):
 def main():
     # find matrix location
     print("Finding the board...")
-    newgame_location = None
-    while (newgame_location == None):
-        print("Please ensure \"New Game\" button is visible on screen.")
-        newgame_location = py.locateOnScreen('./assets/newgame.png')
+    topleft_location = None
+    while (topleft_location == None):
+        print("Please ensure the top-left of the matrix is visible.")
+        topleft_location = py.locateOnScreen('./assets/topleft.png')
 
     square_length = 24  # width / length of square in matrix
     matrix_height = square_length * 20
     matrix_width = square_length * 10
 
-    monitor = {"top": newgame_location.top // 2 - 502, "left": newgame_location.left // 2 - 145, "width": matrix_width,
+    monitor = {"top": topleft_location.top // 2 + 2, "left": topleft_location.left // 2 + 1, "width": matrix_width,
                "height": matrix_height}
+    #monitor = {"top": newgame_location.top // 2 - 502, "left": newgame_location.left // 2 - 145, "width": matrix_width,
+    #           "height": matrix_height}
 
     # important locations relative to matrix
     go_location = (124, 290)
