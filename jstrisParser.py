@@ -1,8 +1,33 @@
+# data handling
 import numpy as np
 import pandas as pd
+
+# graphic data
 import pyautogui as py
-import keyboard
+from PIL import ImageGrab
+
+# keyboard detection
+from pynput import keyboard
+import mss
+
 import time
+
+
+### CUSTOM DEFINITIONS ###
+
+class KeyMap:	
+	# key mappings
+	ccw = keyboard.KeyCode.from_char("q")
+	cw = keyboard.KeyCode.from_char("w")
+	rot180 = keyboard.KeyCode.from_char("p")
+	hold = keyboard.KeyCode.from_char("e")
+	left = keyboard.Key.left
+	right = keyboard.Key.right
+	softdrop = keyboard.Key.down
+	harddrop = keyboard.Key.up
+
+	# key list
+	key_list = [ccw, cw, rot180, hold, left, right, softdrop, harddrop]
 
 
 # black:	RGB(red=0, green=0, blue=0)
@@ -24,58 +49,72 @@ def get_color(pixRGB):
 		177: "S",
 		15: "Z",
 	}	
-	return mapping.get(pixRGB.green, None)
+	return mapping.get(pixRGB[1], None)
 
 
-def pressed_hold_key(event):
-	print("yes")
+
+### GLOBAL VARIABLES ###
+
+# initialize pandas dataframe of moves
+max_moves = 1000
+moves = pd.DataFrame(index=np.arange(0, max_moves), columns=("move", "block1", "block2", "tot_time", "think_time", "place_time", "switch_time", "switched"))
+move_index = 0
+
+# observe pixels and keyboard presses
+start = time.time()
+move_start = time.time()
+switch_start = move_start
 
 
-def update(block_location):
 
-	# key mappings
-	ccw_key = "q"
-	cw_key = "w"
-	hold_key = "e"
-	left_key = "left"
-	right_key = "right"
-	softdrop_key = "down"
-	harddrop_key = "up"
+def update(monitor, block_location):
 
-	# initialize pandas dataframe of moves
-	max_moves = 1000
-	moves = pd.DataFrame(index=np.arange(0, max_moves), columns=("move", "block1", "block2", "tot_time", "think_time", "place_time", "switch_time", "switched"))
-	move_index = 0
+	sct = mss.mss()
 
-	# callback function
-	def on_hold_key(event):
-		print("pressed hold_key")
-		pixRGB = py.pixel(block_location[0], block_location[1])
-		moves.loc[move_index]["block2"] = get_color(pixRGB)
+	# callback functions
+	def on_press(key):
+		global max_moves, moves, move_index, start, move_start, switch_start
 
-	# observe pixels and keyboard presses
-	start = time.time()
+		if(key == KeyMap.harddrop):
+			print("end move")
+			move_end = time.time()
+			move_index = move_index + 1
+				
+			# get new block
+			img = np.array(sct.grab(monitor))
+			pixRGB = img[block_location[0]*2, block_location[1]*2, ]
+			moves.loc[move_index]["block1"] = get_color(pixRGB)
+			return
+
+		elif(key == KeyMap.hold and move_index > 0):
+			print("pressed hold")
+			img = np.array(sct.grab(monitor))
+			pixRGB = img[block_location[0]*2, block_location[1]*2, ]
+			moves.loc[move_index]["block2"] = get_color(pixRGB)
+			return
+
+		elif(key in KeyMap.key_list):
+			print("made move")
+
+
+		else:
+			print("pressed other key:", key)
+			return
+				
+	# don't do anything when key is released
+	def on_release(key):
+		return
+
+	#with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+		#listener.join()
+
+	listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+	listener.start()
+
 	while 1:
-		move_start = time.time()
-		switch_start = move_start
+		pass
 
-		# get block1 and block2
-		pixRGB = py.pixel(block_location[0], block_location[1])
-		moves.loc[move_index]["block1"] = get_color(pixRGB)
-
-
-		#keyboard.on_press_key(hold_key, on_hold_key)
-		keyboard.on_press_key(hold_key, pressed_hold_key)
-
-		print(moves.loc[move_index]["block2"])
-		time.sleep(.1)
-
-		move_end = time.time()
-
-		# Put in all the time values
-
-
-		move_index = move_index + 1
+		
 
 
 def main():
@@ -90,10 +129,13 @@ def main():
 	square_length = 24 		# width / length of square in matrix
 	matrix_height = square_length * 20
 	matrix_width = square_length * 10
-	matrix_location = (newgame_location.left - 147*2, newgame_location.top - 503*2)
 
-	go_location = (matrix_location[0] + 124*2, matrix_location[1] + 290*2)
-	block_location = (matrix_location[0] + 9*square_length, matrix_location[1] + square_length)
+	monitor = {"top": newgame_location.top//2 - 502, "left": newgame_location.left//2 - 145, "width": matrix_width, "height": matrix_height}
+	
+
+	# important locations relative to matrix
+	go_location = (124, 290)
+	block_location = (square_length//2, 9*square_length//2)
 
 
 	# wait until game starts
@@ -103,13 +145,10 @@ def main():
 	# run game
 	try:
 		print("Parsing jstris...")
-		update(block_location)
+		update(monitor, block_location)
 	except KeyboardInterrupt: # If Ctrl + C input
 		exit('Ctrl + C Input - Terminating')
 
 
-
 if __name__ == '__main__':
 	main()
-
-
