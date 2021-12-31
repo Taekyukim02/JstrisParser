@@ -38,7 +38,7 @@ class KeyMap:
 # blue:		RGB(red=31, green=65, blue=195)
 # green:	RGB(red=88, green=177, blue=36)
 # red:		RGB(red=216, green=15, blue=54)
-def get_color(pixRGB):
+def get_color(pix):
 	mapping = {
 		0: "empty",
 		155: "I",
@@ -49,64 +49,81 @@ def get_color(pixRGB):
 		177: "S",
 		15: "Z",
 	}	
-	return mapping.get(pixRGB[1], None)
-
+	return mapping.get(pix[1], None)
 
 
 ### GLOBAL VARIABLES ###
 
 # initialize pandas dataframe of moves
 max_moves = 1000
-moves = pd.DataFrame(index=np.arange(0, max_moves), columns=("move", "block1", "block2", "tot_time", "think_time", "place_time", "switch_time", "switched"))
+moves = pd.DataFrame(index=np.arange(0, max_moves), columns=("block1", "block2", "tot_time", "think_time", "place_time", "switch_time", "switched"))
 move_index = 0
 
-# observe pixels and keyboard presses
-start = time.time()
-move_start = time.time()
-switch_start = move_start
-
+# timing game moves
+t_game = None		# start of game
+t_move = None		# start of move
+t_switch = None		# when held is pressed (or start of move if not held)
+t_place = None		# start of placement movement
 
 
 def update(monitor, block_location):
 
 	sct = mss.mss()
 
+	global t_game, t_move, t_switch
+	t_game = time.time()
+	t_move = time.time()
+	t_switch = t_move
+
 	# callback functions
 	def on_press(key):
-		global max_moves, moves, move_index, start, move_start, switch_start
+		global max_moves, moves, move_index, t_game, t_switch, t_move, t_place
 
-		if(key == KeyMap.harddrop):
-			print("end move")
-			move_end = time.time()
-			move_index = move_index + 1
+		# start movement
+		if (key in KeyMap.key_list and t_place == None):
+			t_place = time.time()
+
+		# end move
+		if (key == KeyMap.harddrop):
+			t_move_end = time.time()
+			moves.loc[move_index]["tot_time"] = (t_move_end - t_move)
+			moves.loc[move_index]["think_time"] = (t_place - t_move)
+			moves.loc[move_index]["place_time"] = (t_move_end - t_switch)
+			moves.loc[move_index]["switch_time"] = (t_switch - t_move)
+
+			# DEBUG: print dataframe row
+			print(moves.loc[move_index])
 				
 			# get new block
+			move_index = move_index + 1
 			img = np.array(sct.grab(monitor))
-			pixRGB = img[block_location[0]*2, block_location[1]*2, ]
-			moves.loc[move_index]["block1"] = get_color(pixRGB)
+			pix = img[block_location[0]*2, block_location[1]*2, ]
+			moves.loc[move_index]["block1"] = get_color(pix)
+
+			# start new move timing
+			t_move = time.time()
+			t_switch = t_move
+			t_place = None
 			return
 
-		elif(key == KeyMap.hold and move_index > 0):
-			print("pressed hold")
+		# hold block
+		if(key == KeyMap.hold and move_index > 0):
 			img = np.array(sct.grab(monitor))
-			pixRGB = img[block_location[0]*2, block_location[1]*2, ]
-			moves.loc[move_index]["block2"] = get_color(pixRGB)
+			pix = img[block_location[0]*2, block_location[1]*2, ]
+			moves.loc[move_index]["block2"] = get_color(pix)
+			moves.loc[move_index]["switched"] = True
+
+			t_switch = time.time()
+			t_place = None
 			return
 
-		elif(key in KeyMap.key_list):
-			print("made move")
-
-
-		else:
+		if(not key in KeyMap.key_list):
 			print("pressed other key:", key)
 			return
 				
 	# don't do anything when key is released
 	def on_release(key):
 		return
-
-	#with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-		#listener.join()
 
 	listener = keyboard.Listener(on_press=on_press, on_release=on_release)
 	listener.start()
